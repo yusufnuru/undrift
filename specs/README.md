@@ -22,6 +22,7 @@
 | [security.md](./security.md) | Vulnerability inventory, security analysis, remediation roadmap |
 | [bugs.md](./bugs.md) | Prioritized bug list with locations, impacts, and fixes |
 | [chrome-extension.md](./chrome-extension.md) | Chrome MV3 specifics: permissions, service worker lifecycle, declarativeNetRequest blocking, tab monitoring, notifications, idle detection |
+| [gamification.md](./gamification.md) | Achievements, Focus Level (XP system), badges, anti-gaming protections, UI integration |
 | [testing.md](./testing.md) | Current state, what should be tested, recommended stack, priority order |
 | [deployment.md](./deployment.md) | Server/client deployment options, infrastructure, recommended architecture |
 | [stripe.md](./stripe.md) | **DEPRECATED** — Previous Stripe payment integration (removed in pivot) |
