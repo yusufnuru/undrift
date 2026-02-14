@@ -40,12 +40,19 @@ body {
   color: #fff;
 }
 
+/* ── Header badges wrapper ── */
+.header-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
 /* ── Streak badge ── */
 .streak-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-left: auto;
   padding: 3px 10px;
   border-radius: 20px;
   background: #1f1a10;

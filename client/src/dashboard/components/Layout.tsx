@@ -6,6 +6,7 @@ const navItems = [
   { to: '/time-tracking', label: 'Time Tracking', icon: '\u29D7' },
   { to: '/sessions', label: 'Sessions', icon: '\u25CE' },
   { to: '/streaks', label: 'Streaks', icon: '\u2736' },
+  { to: '/achievements', label: 'Achievements', icon: '\u2726' },
   { to: '/settings', label: 'Settings', icon: '\u2699' },
 ];
 
@@ -14,6 +15,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/time-tracking': 'Time Tracking',
   '/sessions': 'Sessions',
   '/streaks': 'Streaks',
+  '/achievements': 'Achievements',
   '/settings': 'Settings',
 };
 

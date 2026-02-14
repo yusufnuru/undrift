@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import "./popup.css";
+import { LevelBadge } from "../components/LevelBadge";
+import { getXPProgress } from "../gamification";
 
 interface BlockSession {
   isActive: boolean;
@@ -77,6 +79,7 @@ export function Popup() {
   const [todayScreenTime, setTodayScreenTime] = useState<number>(0);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [sessionStats, setSessionStats] = useState<SessionStats | null>(null);
+  const [levelInfo, setLevelInfo] = useState<{ level: number; progressPercent: number } | null>(null);
   const [encouragement] = useState(
     () => ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]
   );
@@ -112,6 +115,13 @@ export function Popup() {
 
     chrome.runtime.sendMessage({ type: "GET_STATS" }, (response) => {
       if (response) setSessionStats(response);
+    });
+
+    chrome.runtime.sendMessage({ type: "GET_GAMIFICATION" }, (response) => {
+      if (response?.xp) {
+        const progress = getXPProgress(response.xp.total);
+        setLevelInfo({ level: progress.level, progressPercent: progress.progressPercent });
+      }
     });
   }, []);
 
@@ -202,11 +212,16 @@ export function Popup() {
   }
 
   const streakBadge = (
-    <div className="streak-badge" aria-label={streak && streak.currentStreak > 0 ? `${streak.currentStreak} day streak` : "No active streak"}>
-      <span className="streak-icon">&#x1F525;</span>
-      {streak && streak.currentStreak > 0
-        ? `${streak.currentStreak}-day streak`
-        : "Start a streak"}
+    <div className="header-badges">
+      {levelInfo && (
+        <LevelBadge level={levelInfo.level} progressPercent={levelInfo.progressPercent} size="sm" />
+      )}
+      <div className="streak-badge" aria-label={streak && streak.currentStreak > 0 ? `${streak.currentStreak} day streak` : "No active streak"}>
+        <span className="streak-icon">&#x1F525;</span>
+        {streak && streak.currentStreak > 0
+          ? `${streak.currentStreak}-day streak`
+          : "Start a streak"}
+      </div>
     </div>
   );
 

@@ -123,6 +123,11 @@ export function Blocked() {
   const [reflectResponse, setReflectResponse] = useState("");
   const [reflectSubmitted, setReflectSubmitted] = useState(false);
 
+  // XP toast state
+  const [xpToast, setXpToast] = useState<{ amount: number; key: number } | null>(null);
+  // Achievement modal state
+  const [achievementModal, setAchievementModal] = useState<{ name: string; description: string; icon: string } | null>(null);
+
   // Stats state
   const [streak, setStreak] = useState<StreakData>({
     currentStreak: 0,
@@ -184,6 +189,8 @@ export function Blocked() {
           type: "LOG_BREATHE",
           status: "complete",
           domain: blockedSite,
+        }, (response) => {
+          if (response) showGamificationFeedback(response);
         });
         return;
       }
@@ -223,6 +230,20 @@ export function Blocked() {
     };
   }, []);
 
+  // ── Gamification feedback ──
+
+  const showGamificationFeedback = (response: { xpAwarded?: number; newAchievements?: { id: string; tier: string }[] }) => {
+    if (response.xpAwarded && response.xpAwarded > 0) {
+      setXpToast({ amount: response.xpAwarded, key: Date.now() });
+      setTimeout(() => setXpToast(null), 1800);
+    }
+    if (response.newAchievements && response.newAchievements.length > 0) {
+      const achId = response.newAchievements[0]!.id;
+      const name = achId.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+      setAchievementModal({ name, description: "Achievement unlocked!", icon: "\u2B50" });
+    }
+  };
+
   // ── Handlers ──
 
   const saveReason = () => {
@@ -238,12 +259,16 @@ export function Blocked() {
     if (!trimmed) return;
     chrome.runtime.sendMessage({
       type: "SAVE_REFLECTION",
+      text: trimmed,
+      domain: blockedSite,
       data: {
         domain: blockedSite,
         prompt: reflectPrompt,
         response: trimmed,
         urgeLevel: null,
       },
+    }, (response) => {
+      if (response) showGamificationFeedback(response);
     });
     setReflectSubmitted(true);
   };
@@ -497,6 +522,26 @@ export function Blocked() {
       <button className="go-back-btn" onClick={goBackToWork}>
         Go back to work
       </button>
+
+      {/* XP Toast */}
+      {xpToast && (
+        <div key={xpToast.key} className="xp-toast">+{xpToast.amount} XP</div>
+      )}
+
+      {/* Achievement Modal */}
+      {achievementModal && (
+        <div className="achievement-overlay" onClick={() => setAchievementModal(null)}>
+          <div className="achievement-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="achievement-modal-icon">{achievementModal.icon}</div>
+            <div className="achievement-modal-title">Achievement Unlocked!</div>
+            <div className="achievement-modal-name">{achievementModal.name}</div>
+            <div className="achievement-modal-desc">{achievementModal.description}</div>
+            <button className="achievement-modal-btn" onClick={() => setAchievementModal(null)}>
+              Nice!
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

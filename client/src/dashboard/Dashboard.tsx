@@ -5,6 +5,7 @@ import TimeTracking from './pages/TimeTracking';
 import Sessions from './pages/Sessions';
 import Streaks from './pages/Streaks';
 import Settings from './pages/Settings';
+import Achievements from './pages/Achievements';
 
 export default function Dashboard() {
   return (
@@ -15,6 +16,7 @@ export default function Dashboard() {
           <Route path="time-tracking" element={<TimeTracking />} />
           <Route path="sessions" element={<Sessions />} />
           <Route path="streaks" element={<Streaks />} />
+          <Route path="achievements" element={<Achievements />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

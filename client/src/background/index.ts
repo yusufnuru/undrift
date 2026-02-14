@@ -5,6 +5,24 @@
 // ALL state is persisted in chrome.storage.local (never in-memory globals).
 // ============================================================================
 
+import {
+  getGamificationData,
+  saveGamificationData,
+  getSessionCtx,
+  saveSessionCtx,
+  createDefaultSessionCtx,
+  awardXP,
+  updateCounters,
+  checkAchievements,
+  ACHIEVEMENT_XP,
+  ACHIEVEMENT_DEFINITIONS,
+} from "../gamification";
+import type {
+  GamificationData,
+  EarnedAchievement,
+  CounterEvent,
+} from "../gamification";
+
 // --- Interfaces ---
 
 interface BlockSession {
@@ -467,6 +485,91 @@ async function checkTimeAlerts(): Promise<void> {
   if (changed) await saveNotificationState(state);
 }
 
+// --- Gamification Processing ---
+
+interface GamificationResult {
+  xpAwarded: number;
+  newAchievements: EarnedAchievement[];
+  leveledUp: boolean;
+  newLevel: number;
+}
+
+async function processGamificationEvent(
+  counterEvent: CounterEvent,
+  xpActions: { source: Parameters<typeof awardXP>[1]; amount: number; description: string }[],
+  checkCtx?: Parameters<typeof checkAchievements>[2],
+): Promise<GamificationResult> {
+  let data = await getGamificationData();
+  const session = await getSession();
+  const sessionCtx = session.sessionId
+    ? await getSessionCtx(session.sessionId)
+    : undefined;
+
+  // Update counters
+  data = updateCounters(data, counterEvent);
+
+  // Award XP
+  let totalAwarded = 0;
+  let leveledUp = false;
+  let newLevel = data.xp.level;
+
+  for (const action of xpActions) {
+    const result = awardXP(data, action.source, action.amount, action.description, sessionCtx);
+    data = result.data;
+    totalAwarded += result.awarded;
+    if (result.leveledUp) {
+      leveledUp = true;
+      newLevel = result.newLevel;
+    }
+  }
+
+  // Check achievements
+  const streakData = await getStreak();
+  const achievementResult = checkAchievements(data, streakData, checkCtx);
+  data = achievementResult.data;
+  const newAchievements = achievementResult.newAchievements;
+
+  // Award XP for new achievements
+  for (const a of newAchievements) {
+    const def = ACHIEVEMENT_DEFINITIONS.find((d) => d.id === a.id);
+    const xp = ACHIEVEMENT_XP[a.tier];
+    const result = awardXP(data, "achievement", xp, `Achievement: ${def?.name ?? a.id}`);
+    data = result.data;
+    totalAwarded += result.awarded;
+    if (result.leveledUp) {
+      leveledUp = true;
+      newLevel = result.newLevel;
+    }
+  }
+
+  // Save
+  await saveGamificationData(data);
+  if (sessionCtx) await saveSessionCtx(sessionCtx);
+
+  // Notifications
+  for (const a of newAchievements) {
+    const def = ACHIEVEMENT_DEFINITIONS.find((d) => d.id === a.id);
+    if (def) {
+      await sendNotification(
+        `achievement-${a.id}`,
+        "Achievement Unlocked!",
+        `${def.icon} ${def.name} — ${def.description}`,
+        2,
+      );
+    }
+  }
+  if (leveledUp) {
+    await sendNotification(
+      `level-up-${newLevel}`,
+      "Level Up!",
+      `You're now Level ${newLevel}. Keep going!`,
+      1,
+    );
+  }
+
+  return { xpAwarded: totalAwarded, newAchievements, leveledUp, newLevel };
+}
+
 // --- Session Management ---
 
 async function startSession(
@@ -490,6 +593,9 @@ async function startSession(
   await saveSession(session);
   await enableBlocking(session.blockedSites);
   await redirectExistingTabs(session.blockedSites);
+
+  // Initialize gamification session context
+  await saveSessionCtx(createDefaultSessionCtx(sessionId));
 
   // Reset session warning flag
   const notifState = await getNotificationState();
@@ -546,6 +652,32 @@ async function endSession(
   // Update streak if completed
   if (completed) {
     await updateStreakOnCompletion();
+  }
+
+  // Gamification
+  if (completed) {
+    const durationBonus = Math.floor(session.durationMinutes / 30) * 10;
+    const xpActions: { source: Parameters<typeof awardXP>[1]; amount: number; description: string }[] = [
+      { source: "session_complete", amount: 50, description: `Completed ${session.durationMinutes}-min focus session` },
+    ];
+    if (durationBonus > 0) {
+      xpActions.push({ source: "session_duration_bonus", amount: durationBonus, description: `Duration bonus (${session.durationMinutes} min)` });
+    }
+    // Daily streak XP
+    const streakNow = await getStreak();
+    if (streakNow.currentStreak > 0) {
+      xpActions.push({ source: "streak_daily", amount: 25, description: `Streak day ${streakNow.currentStreak}` });
+    }
+    await processGamificationEvent(
+      { type: "session_complete", durationMinutes: session.durationMinutes, interruptionCount: session.interruptions.length, startedAt: session.startedAt },
+      xpActions,
+      { sessionStartedAt: session.startedAt, sessionEndedAt: session.endedAt, sessionDurationMinutes: session.durationMinutes },
+    );
+  } else if (reason === "manual") {
+    await processGamificationEvent(
+      { type: "session_manual_end" },
+      [],
+    );
   }
 
   // Session complete notification
@@ -767,11 +899,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const interruption: Interruption = {
         timestamp: Date.now(),
         domain: message.domain || "unknown",
-        outcome: "stayed", // Default to "stayed"; changed to "broke" only on manual session end
+        outcome: "stayed",
       };
       session.interruptions.push(interruption);
       await saveSession(session);
-      sendResponse({ success: true });
+
+      const gamResult = await processGamificationEvent(
+        { type: "interruption_resisted" },
+        [{ source: "interruption_resisted", amount: 15, description: `Resisted ${message.domain || "distraction"}` }],
+      );
+      sendResponse({ success: true, xpAwarded: gamResult.xpAwarded, newAchievements: gamResult.newAchievements });
     })();
     return true;
   }
@@ -808,19 +945,53 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "GET_GAMIFICATION") {
+    getGamificationData().then((data) => sendResponse(data));
+    return true;
+  }
+
+  if (message.type === "LOG_BREATHE") {
+    (async () => {
+      if (message.status !== "complete") {
+        sendResponse({ success: true });
+        return;
+      }
+      const gamResult = await processGamificationEvent(
+        { type: "breathing_complete" },
+        [{ source: "breathing_exercise", amount: 10, description: "Completed breathing exercise" }],
+      );
+      sendResponse({ success: true, xpAwarded: gamResult.xpAwarded, newAchievements: gamResult.newAchievements });
+    })();
+    return true;
+  }
+
   if (message.type === "SAVE_REFLECTION") {
     (async () => {
       const result = await chrome.storage.local.get("reflections");
       const reflections: Reflection[] = result.reflections || [];
       const session = await getSession();
+      const text = message.text || message.data?.response || "";
       reflections.push({
         timestamp: Date.now(),
         sessionId: session.sessionId || "",
-        text: message.text || "",
-        domain: message.domain,
+        text,
+        domain: message.domain || message.data?.domain,
       });
       await chrome.storage.local.set({ reflections });
-      sendResponse({ success: true });
+
+      // Gamification: only if reflection is meaningful (>= 10 chars)
+      let gamResult: GamificationResult | null = null;
+      if (text.length >= 10) {
+        gamResult = await processGamificationEvent(
+          { type: "reflection_submitted" },
+          [{ source: "reflection", amount: 10, description: "Submitted reflection" }],
+        );
+      }
+      sendResponse({
+        success: true,
+        xpAwarded: gamResult?.xpAwarded ?? 0,
+        newAchievements: gamResult?.newAchievements ?? [],
+      });
     })();
     return true;
   }

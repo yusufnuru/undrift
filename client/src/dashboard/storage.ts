@@ -276,6 +276,26 @@ export async function getSettings(): Promise<Settings> {
   };
 }
 
+// --- Gamification ---
+
+export async function getGamificationData() {
+  const { gamification } = await chrome.storage.local.get('gamification');
+  return gamification || {
+    xp: { total: 0, todayEarned: 0, todayDate: '', level: 1, history: [] },
+    achievements: { earned: [] },
+    counters: {
+      totalSessionsCompleted: 0,
+      totalInterruptionsResisted: 0,
+      totalFocusMinutes: 0,
+      totalBreathingExercises: 0,
+      totalReflections: 0,
+      totalTimeSavedMinutes: 0,
+      consecutiveCompletedSessions: 0,
+      consecutiveCleanSessions: 0,
+    },
+  };
+}
+
 export async function updateSettings(data: Partial<Settings>): Promise<Settings> {
   const updates: Record<string, unknown> = {};
   if (data.personalReason !== undefined) updates.personalReason = data.personalReason;
