@@ -52,18 +52,6 @@ export default function Overview() {
   return (
     <div className="animate-page-enter">
 
-      <div className="bg-bg-card border border-border-card rounded-md p-6 backdrop-blur-[8px] shadow-card transition-[border-color,box-shadow] duration-300 hover:border-[rgba(255,255,255,0.1)] mb-7">
-        <div className="text-center py-12 px-8 relative overflow-hidden streak-glow">
-          <div className="font-display text-[88px] font-normal text-accent-ember leading-none relative [text-shadow:0_0_60px_rgba(245,158,11,0.2)] max-md:text-[64px]">
-            {stats.currentStreak}
-          </div>
-          <div className="text-sm text-text-secondary mt-3 uppercase tracking-[0.1em] font-medium">
-            day streak
-          </div>
-        </div>
-      </div>
-
-
       <h3 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-text-secondary mb-4">
         Today&rsquo;s Summary
       </h3>

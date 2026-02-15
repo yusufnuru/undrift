@@ -61,20 +61,12 @@ interface SessionHistory {
   lastSyncedAt: number;
 }
 
-interface StreakData {
-  currentStreak: number;
-  longestStreak: number;
-  lastCompletedDate: string;
-  streakStartDate: string;
-}
-
 interface NotificationState {
   timeAlertsSent: {
     [domain: string]: {
       [threshold: number]: string;
     };
   };
-  lastStreakAlertDate: string;
   sessionWarningFired: boolean;
 }
 
@@ -91,7 +83,6 @@ const DEFAULT_BLOCKED_SITES = ["twitter.com", "x.com"];
 const IDLE_DETECTION_INTERVAL = 60;
 const HEARTBEAT_PERIOD_MINUTES = 0.5;
 const TIME_ALERT_THRESHOLDS = [15, 30, 60]; // minutes
-const STREAK_MILESTONES = [3, 7, 14, 21, 30, 60, 90, 180, 365];
 const SESSION_WARNING_MINUTES = 5;
 const MAX_LOCAL_SESSIONS = 100;
 
@@ -184,28 +175,11 @@ async function saveSessionHistory(history: SessionHistory): Promise<void> {
   await chrome.storage.local.set({ sessionHistory: history });
 }
 
-async function getStreak(): Promise<StreakData> {
-  const result = await chrome.storage.local.get("streak");
-  return (
-    result.streak || {
-      currentStreak: 0,
-      longestStreak: 0,
-      lastCompletedDate: "",
-      streakStartDate: "",
-    }
-  );
-}
-
-async function saveStreak(streak: StreakData): Promise<void> {
-  await chrome.storage.local.set({ streak });
-}
-
 async function getNotificationState(): Promise<NotificationState> {
   const result = await chrome.storage.local.get("notificationState");
   return (
     result.notificationState || {
       timeAlertsSent: {},
-      lastStreakAlertDate: "",
       sessionWarningFired: false,
     }
   );
@@ -358,79 +332,6 @@ async function resumeTrackingForActiveTab(): Promise<void> {
   }
 }
 
-// --- Streak Management ---
-
-function daysBetween(dateA: string, dateB: string): number {
-  const a = new Date(dateA + "T00:00:00");
-  const b = new Date(dateB + "T00:00:00");
-  return Math.round(Math.abs(a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24));
-}
-
-async function updateStreakOnCompletion(): Promise<void> {
-  const streak = await getStreak();
-  const today = getTodayString();
-
-  if (streak.lastCompletedDate === today) {
-    // Already completed a session today, no streak change
-    return;
-  }
-
-  if (
-    streak.lastCompletedDate &&
-    daysBetween(streak.lastCompletedDate, today) === 1
-  ) {
-    // Consecutive day — increment streak
-    streak.currentStreak += 1;
-  } else if (!streak.lastCompletedDate || daysBetween(streak.lastCompletedDate, today) > 1) {
-    // Gap of more than 1 day or first ever — start new streak
-    streak.currentStreak = 1;
-    streak.streakStartDate = today;
-  }
-
-  streak.lastCompletedDate = today;
-  if (streak.currentStreak > streak.longestStreak) {
-    streak.longestStreak = streak.currentStreak;
-  }
-
-  await saveStreak(streak);
-
-  // Check for streak milestones
-  if (STREAK_MILESTONES.includes(streak.currentStreak)) {
-    await sendNotification(
-      `streak-milestone-${streak.currentStreak}`,
-      `${streak.currentStreak} days focused!`,
-      `You've maintained focus for ${streak.currentStreak} consecutive days. Keep it up!`,
-      2
-    );
-  }
-}
-
-async function checkStreakBroken(): Promise<void> {
-  const streak = await getStreak();
-  if (streak.currentStreak === 0) return;
-
-  const today = getTodayString();
-  if (!streak.lastCompletedDate) return;
-
-  const gap = daysBetween(streak.lastCompletedDate, today);
-  if (gap >= 2) {
-    // Streak is broken — a full calendar day passed with no completion
-    const oldStreak = streak.currentStreak;
-    streak.currentStreak = 0;
-    streak.streakStartDate = "";
-    await saveStreak(streak);
-
-    await sendNotification(
-      "streak-broken",
-      `Streak ended at ${oldStreak} days`,
-      oldStreak === streak.longestStreak
-        ? "That was your longest streak yet. Start fresh today."
-        : "Start a new streak today with a focus session.",
-      1
-    );
-  }
-}
-
 // --- Notifications ---
 
 async function sendNotification(
@@ -524,8 +425,7 @@ async function processGamificationEvent(
   }
 
   // Check achievements
-  const streakData = await getStreak();
-  const achievementResult = checkAchievements(data, streakData, checkCtx);
+  const achievementResult = checkAchievements(data, checkCtx);
   data = achievementResult.data;
   const newAchievements = achievementResult.newAchievements;
 
@@ -649,11 +549,6 @@ async function endSession(
   }
   await saveSessionHistory(history);
 
-  // Update streak if completed
-  if (completed) {
-    await updateStreakOnCompletion();
-  }
-
   // Gamification
   if (completed) {
     const durationBonus = Math.floor(session.durationMinutes / 30) * 10;
@@ -662,11 +557,6 @@ async function endSession(
     ];
     if (durationBonus > 0) {
       xpActions.push({ source: "session_duration_bonus", amount: durationBonus, description: `Duration bonus (${session.durationMinutes} min)` });
-    }
-    // Daily streak XP
-    const streakNow = await getStreak();
-    if (streakNow.currentStreak > 0) {
-      xpActions.push({ source: "streak_daily", amount: 25, description: `Streak day ${streakNow.currentStreak}` });
     }
     await processGamificationEvent(
       { type: "session_complete", durationMinutes: session.durationMinutes, interruptionCount: session.interruptions.length, startedAt: session.startedAt },
@@ -682,7 +572,6 @@ async function endSession(
 
   // Session complete notification
   if (completed) {
-    const streak = await getStreak();
     const interruptionCount = session.interruptions.length;
     const siteCount = session.blockedSites.length;
     await sendNotification(
@@ -690,10 +579,7 @@ async function endSession(
       "Focus session complete!",
       `You blocked ${siteCount} site${siteCount !== 1 ? "s" : ""} for ${session.durationMinutes} minutes` +
         (interruptionCount > 0
-          ? ` and resisted ${interruptionCount} temptation${interruptionCount !== 1 ? "s" : ""}`
-          : "") +
-        (streak.currentStreak > 0
-          ? `. Streak: ${streak.currentStreak} day${streak.currentStreak !== 1 ? "s" : ""}.`
+          ? ` and resisted ${interruptionCount} temptation${interruptionCount !== 1 ? "s" : ""}.`
           : "."),
       2
     );
@@ -711,26 +597,6 @@ async function ensureAlarmsExist(): Promise<void> {
     });
   }
 
-  // Streak check — daily at 8 PM local time
-  const streakCheck = await chrome.alarms.get("streak-check");
-  if (!streakCheck) {
-    const now = new Date();
-    const next8pm = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-      20,
-      0,
-      0
-    );
-    if (next8pm.getTime() <= now.getTime()) {
-      next8pm.setDate(next8pm.getDate() + 1);
-    }
-    chrome.alarms.create("streak-check", {
-      when: next8pm.getTime(),
-      periodInMinutes: 1440,
-    });
-  }
 }
 
 // ============================================================================
@@ -829,31 +695,6 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === "heartbeat") {
     await flushCurrentTracking();
     await checkTimeAlerts();
-
-    // Also check if streak is broken (covers midnight rollover)
-    await checkStreakBroken();
-    return;
-  }
-
-  if (alarm.name === "streak-check") {
-    // Evening check — is streak at risk?
-    const streak = await getStreak();
-    if (streak.currentStreak === 0) return;
-
-    const today = getTodayString();
-    if (streak.lastCompletedDate === today) return; // Already completed today
-
-    const notifState = await getNotificationState();
-    if (notifState.lastStreakAlertDate === today) return; // Already alerted today
-    notifState.lastStreakAlertDate = today;
-    await saveNotificationState(notifState);
-
-    await sendNotification(
-      "streak-at-risk",
-      `Your ${streak.currentStreak}-day streak is at risk`,
-      "Complete a focus session before midnight to keep it alive.",
-      2
-    );
     return;
   }
 });
@@ -876,11 +717,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.type === "GET_SESSION") {
     getSession().then((session) => sendResponse(session));
-    return true;
-  }
-
-  if (message.type === "GET_STREAK") {
-    getStreak().then((streak) => sendResponse(streak));
     return true;
   }
 
@@ -915,9 +751,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.type === "GET_STATS") {
     (async () => {
-      const [tracking, streak, history] = await Promise.all([
+      const [tracking, history] = await Promise.all([
         getTimeTracking(),
-        getStreak(),
         getSessionHistory(),
       ]);
       const today = getTodayString();
@@ -933,7 +768,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({
         todayTracking,
         totalTodaySeconds: totalToday,
-        streak,
         completedSessions,
         totalSessions,
         completionRate:
@@ -1022,9 +856,6 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 chrome.runtime.onStartup.addListener(async () => {
   await ensureAlarmsExist();
-
-  // Check for broken streaks on startup
-  await checkStreakBroken();
 
   const session = await getSession();
   if (session.isActive && session.endsAt > Date.now()) {

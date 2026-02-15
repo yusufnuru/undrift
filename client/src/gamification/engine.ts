@@ -179,16 +179,10 @@ export function updateCounters(
 
 // --- Achievements ---
 
-interface StreakInfo {
-  currentStreak: number;
-  longestStreak: number;
-}
-
 interface CheckContext {
   sessionStartedAt?: number;
   sessionEndedAt?: number;
   sessionDurationMinutes?: number;
-  previousStreakBeforeReset?: number;
 }
 
 interface CheckAchievementsResult {
@@ -198,7 +192,6 @@ interface CheckAchievementsResult {
 
 export function checkAchievements(
   data: GamificationData,
-  streakData: StreakInfo,
   checkCtx?: CheckContext,
 ): CheckAchievementsResult {
   const earnedIds = new Set(data.achievements.earned.map((a) => a.id));
@@ -218,7 +211,7 @@ export function checkAchievements(
     }
 
     if (def.customCheck) {
-      earned = evaluateCustomCheck(def.customCheck, counters, streakData, checkCtx);
+      earned = evaluateCustomCheck(def.customCheck, counters, checkCtx);
     }
 
     if (earned) {
@@ -238,16 +231,8 @@ export function checkAchievements(
 function evaluateCustomCheck(
   check: string,
   counters: GamificationCounters,
-  streak: StreakInfo,
   ctx?: CheckContext,
 ): boolean {
-  // Streak checks
-  const streakMatch = check.match(/^streak_(\d+)$/);
-  if (streakMatch) {
-    const target = parseInt(streakMatch[1]!, 10);
-    return streak.currentStreak >= target || streak.longestStreak >= target;
-  }
-
   switch (check) {
     case "night_owl": {
       if (!ctx?.sessionEndedAt) return false;
@@ -262,16 +247,12 @@ function evaluateCustomCheck(
     case "marathon": {
       return (ctx?.sessionDurationMinutes ?? 0) >= 180;
     }
-    case "comeback": {
-      return (ctx?.previousStreakBeforeReset ?? 0) >= 7 && streak.currentStreak >= 1;
-    }
     case "iron_will":
       // This needs daily tracking — approximate with total
-      // A proper implementation would track daily counts
       return counters.totalInterruptionsResisted >= 10;
     case "perfectionist":
-      // Would need calendar data — use streak >= 7 as proxy
-      return streak.currentStreak >= 7;
+      // Would need calendar data — not checkable from counters alone
+      return false;
     case "clean_slate":
       // Would need time tracking data — not checkable from counters alone
       return false;

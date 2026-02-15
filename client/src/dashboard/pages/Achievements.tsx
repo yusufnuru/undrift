@@ -15,7 +15,6 @@ import { getGamificationData } from "../storage";
 
 const CATEGORIES: { key: AchievementCategory | "all"; label: string }[] = [
   { key: "all", label: "All" },
-  { key: "streak", label: "Streak" },
   { key: "session", label: "Session" },
   { key: "resistance", label: "Resistance" },
   { key: "time", label: "Time" },

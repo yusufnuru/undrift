@@ -415,49 +415,11 @@ body {
   color: #ccc;
 }
 
-.stat-value.streak {
-  color: #f0b040;
-}
-
 .stats-encouragement {
   font-size: 12px;
   color: #5a8a5a;
   text-align: center;
   padding-top: 4px;
-}
-
-/* ── Streak Warning ── */
-.streak-warning {
-  width: 100%;
-  background: #1a1508;
-  border: 1px solid #3a2a10;
-  border-radius: 12px;
-  padding: 16px 20px;
-  margin-bottom: 32px;
-  text-align: center;
-}
-
-.streak-warning.long-streak {
-  border-color: #5a3a10;
-  background: #201a08;
-  box-shadow: 0 0 20px rgba(240, 176, 64, 0.06);
-}
-
-.streak-warning-icon {
-  font-size: 20px;
-  margin-bottom: 6px;
-}
-
-.streak-warning-text {
-  font-size: 14px;
-  color: #d4a040;
-  font-weight: 600;
-  line-height: 1.5;
-}
-
-.streak-warning.long-streak .streak-warning-text {
-  color: #f0c060;
-  font-size: 15px;
 }
 
 /* ── Go Back Button ── */

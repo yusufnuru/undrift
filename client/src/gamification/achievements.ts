@@ -8,17 +8,6 @@ export const ACHIEVEMENT_XP: Record<AchievementTier, number> = {
 };
 
 export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
-  // ── Streak ──
-  { id: "first_spark", name: "First Spark", description: "Complete 1 focus session", icon: "\u2727", tier: "bronze", category: "streak", hidden: false, requirement: { counter: "totalSessionsCompleted", threshold: 1 } },
-  { id: "three_day_hold", name: "Three-Day Hold", description: "Achieve a 3-day streak", icon: "\u2736", tier: "bronze", category: "streak", hidden: false, customCheck: "streak_3" },
-  { id: "week_warrior", name: "Week Warrior", description: "Achieve a 7-day streak", icon: "\u2694", tier: "silver", category: "streak", hidden: false, customCheck: "streak_7" },
-  { id: "fortnight_focus", name: "Fortnight Focus", description: "Achieve a 14-day streak", icon: "\u2741", tier: "silver", category: "streak", hidden: false, customCheck: "streak_14" },
-  { id: "monthly_master", name: "Monthly Master", description: "Achieve a 30-day streak", icon: "\u2654", tier: "gold", category: "streak", hidden: false, customCheck: "streak_30" },
-  { id: "sixty_strong", name: "Sixty Strong", description: "Achieve a 60-day streak", icon: "\u2726", tier: "gold", category: "streak", hidden: false, customCheck: "streak_60" },
-  { id: "quarterly_titan", name: "Quarterly Titan", description: "Achieve a 90-day streak", icon: "\u26A1", tier: "platinum", category: "streak", hidden: false, customCheck: "streak_90" },
-  { id: "half_year_hero", name: "Half-Year Hero", description: "Achieve a 180-day streak", icon: "\u2605", tier: "platinum", category: "streak", hidden: false, customCheck: "streak_180" },
-  { id: "year_of_focus", name: "Year of Focus", description: "Achieve a 365-day streak", icon: "\u2742", tier: "platinum", category: "streak", hidden: false, customCheck: "streak_365" },
-
   // ── Session ──
   { id: "session_one", name: "Session One", description: "Complete your first focus session", icon: "\u25C9", tier: "bronze", category: "session", hidden: false, requirement: { counter: "totalSessionsCompleted", threshold: 1 } },
   { id: "ten_down", name: "Ten Down", description: "Complete 10 sessions", icon: "\u25CE", tier: "bronze", category: "session", hidden: false, requirement: { counter: "totalSessionsCompleted", threshold: 10 } },
@@ -57,7 +46,6 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
   { id: "night_owl", name: "Night Owl", description: "Complete a session that ends after midnight", icon: "\u263D", tier: "bronze", category: "special", hidden: true, customCheck: "night_owl" },
   { id: "early_bird", name: "Early Bird", description: "Start a session before 6 AM", icon: "\u2600", tier: "bronze", category: "special", hidden: true, customCheck: "early_bird" },
   { id: "marathon", name: "Marathon", description: "Complete a single session of 3+ hours", icon: "\u2192", tier: "silver", category: "special", hidden: true, customCheck: "marathon" },
-  { id: "comeback", name: "Comeback", description: "Start a new streak after losing one of 7+ days", icon: "\u21AA", tier: "silver", category: "special", hidden: true, customCheck: "comeback" },
   { id: "perfectionist", name: "Perfectionist", description: "Complete every session in a calendar week (7/7 days)", icon: "\u2737", tier: "gold", category: "special", hidden: true, customCheck: "perfectionist" },
   { id: "clean_slate", name: "Clean Slate", description: "Go a full week with zero time on blocked sites outside sessions", icon: "\u2730", tier: "gold", category: "special", hidden: true, customCheck: "clean_slate" },
 ];

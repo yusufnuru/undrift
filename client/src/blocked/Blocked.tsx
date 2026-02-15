@@ -10,11 +10,6 @@ interface BlockSession {
   startedAt?: number;
 }
 
-interface StreakData {
-  currentStreak: number;
-  longestStreak: number;
-}
-
 interface StatsData {
   interruptionsToday: number;
 }
@@ -83,9 +78,7 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function getEncouragingMessage(streak: number, interruptions: number): string {
-  if (streak >= 7) return "Incredible consistency. Keep building.";
-  if (streak >= 3) return "Your streak is growing. Stay strong.";
+function getEncouragingMessage(interruptions: number): string {
   if (interruptions === 0) return "No interruptions today. Clean focus.";
   if (interruptions <= 3) return "You're resisting well today.";
   return "Each time you resist gets easier.";
@@ -129,20 +122,12 @@ export function Blocked() {
   const [achievementModal, setAchievementModal] = useState<{ name: string; description: string; icon: string } | null>(null);
 
   // Stats state
-  const [streak, setStreak] = useState<StreakData>({
-    currentStreak: 0,
-    longestStreak: 0,
-  });
   const [stats, setStats] = useState<StatsData>({ interruptionsToday: 0 });
 
   // ── Fetch session data on mount ──
   useEffect(() => {
     chrome.runtime.sendMessage({ type: "GET_SESSION" }, (response) => {
       if (response) setSession(response);
-    });
-
-    chrome.runtime.sendMessage({ type: "GET_STREAK" }, (response) => {
-      if (response) setStreak(response);
     });
 
     chrome.runtime.sendMessage({ type: "GET_STATS" }, (response) => {
@@ -473,13 +458,6 @@ export function Blocked() {
             <div className="tool-card-body">
               <div className="stats-container">
                 <div className="stat-row">
-                  <span className="stat-label">Current streak</span>
-                  <span className="stat-value streak">
-                    {streak.currentStreak} day
-                    {streak.currentStreak !== 1 ? "s" : ""}
-                  </span>
-                </div>
-                <div className="stat-row">
                   <span className="stat-label">Interruptions today</span>
                   <span className="stat-value">
                     Resisted {stats.interruptionsToday} time
@@ -494,7 +472,6 @@ export function Blocked() {
                 </div>
                 <div className="stats-encouragement">
                   {getEncouragingMessage(
-                    streak.currentStreak,
                     stats.interruptionsToday
                   )}
                 </div>
@@ -503,20 +480,6 @@ export function Blocked() {
           )}
         </div>
       </div>
-
-
-      {streak.currentStreak >= 1 && (
-        <div
-          className={`streak-warning ${
-            streak.currentStreak >= 7 ? "long-streak" : ""
-          }`}
-        >
-          <div className="streak-warning-icon" aria-hidden="true">&#128293;</div>
-          <div className="streak-warning-text">
-            Your {streak.currentStreak}-day streak is alive. Stay focused.
-          </div>
-        </div>
-      )}
 
 
       <button className="go-back-btn" onClick={goBackToWork}>

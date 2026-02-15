@@ -5,7 +5,6 @@
 export type AchievementTier = "bronze" | "silver" | "gold" | "platinum";
 
 export type AchievementCategory =
-  | "streak"
   | "session"
   | "resistance"
   | "time"
@@ -19,7 +18,6 @@ export type XPSource =
   | "interruption_resisted"
   | "breathing_exercise"
   | "reflection"
-  | "streak_daily"
   | "achievement";
 
 export interface AchievementDefinition {

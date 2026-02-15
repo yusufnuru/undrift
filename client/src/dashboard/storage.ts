@@ -4,7 +4,6 @@
 import type {
   TimeTrackingEntry,
   Session,
-  StreakData,
   OverviewStats,
   Settings,
   SiteBreakdown,
@@ -161,16 +160,6 @@ export async function getSessions(
   };
 }
 
-export async function getStreaks(): Promise<StreakData> {
-  const { streak } = await chrome.storage.local.get('streak') as { streak?: StreakData };
-  return streak || {
-    currentStreak: 0,
-    longestStreak: 0,
-    lastCompletedDate: '',
-    streakStartDate: '',
-  };
-}
-
 export async function getCalendarData(): Promise<{ date: string; completed: boolean }[]> {
   const { sessionHistory } = await chrome.storage.local.get('sessionHistory') as { sessionHistory?: StoredSessionHistory };
   const sessions = sessionHistory?.sessions || [];
@@ -195,11 +184,9 @@ export async function getOverviewStats(): Promise<OverviewStats> {
   const [
     { timeTracking },
     { sessionHistory },
-    { streak },
   ] = await Promise.all([
     chrome.storage.local.get('timeTracking') as Promise<{ timeTracking?: StoredTimeTracking }>,
     chrome.storage.local.get('sessionHistory') as Promise<{ sessionHistory?: StoredSessionHistory }>,
-    chrome.storage.local.get('streak') as Promise<{ streak?: StreakData }>,
   ]);
 
   const today = todayStr();
@@ -250,7 +237,6 @@ export async function getOverviewStats(): Promise<OverviewStats> {
     .sort(([, a], [, b]) => b - a)[0]?.[0] || 'None yet';
 
   return {
-    currentStreak: streak?.currentStreak ?? 0,
     todayScreenTime,
     sessionsToday: todaySessions.length,
     interruptionsResisted: todayInterruptions,
@@ -267,9 +253,6 @@ export async function getSettings(): Promise<Settings> {
   return {
     personalReason: result.personalReason || '',
     notificationPrefs: result.notificationSettings || {
-      streakMilestone: true,
-      streakAtRisk: true,
-      streakBroken: true,
       timeLimit: true,
       dailySummary: false,
     },
