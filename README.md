@@ -1,6 +1,6 @@
-> **This project is still in development. Undrift is not yet available for download or install.**
+> 🚧 **This project is still in development. Undrift is not yet available for download or install.**
 
-# Undrift
+# 🛡️ Undrift
 
 A Chrome extension that helps you quit distracting websites — not by willpower alone, but by changing the moment you reach for them.
 
@@ -12,15 +12,15 @@ You pick your distracting sites (Twitter, YouTube, Reddit, TikTok, etc.), set a 
 
 ### Core features
 
-- **Site blocking** during timed focus sessions
-- **Behavioral interventions** on the blocked page (breathing exercises, journaling/reflection, motivational prompts)
-- **Time tracking** per site, per day
-- **Streaks and session history**
-- **Interruption tracking** — how many times you tried to visit a blocked site and whether you stayed focused
-- **XP and achievements** — level up by staying consistent
-- **Analytics dashboard** with charts and historical data
+- 🚫 **Site blocking** during timed focus sessions
+- 🧘 **Behavioral interventions** on the blocked page (breathing exercises, journaling/reflection, motivational prompts)
+- ⏱️ **Time tracking** per site, per day
+- 🔥 **Streaks and session history**
+- 💪 **Interruption tracking** — how many times you tried to visit a blocked site and whether you stayed focused
+- ⭐ **XP and achievements** — level up by staying consistent
+- 📊 **Analytics dashboard** with charts and historical data
 
-## Philosophy
+## 💡 Philosophy
 
 Undrift draws heavy inspiration from [QUITTR](https://quittrapp.com/) and its approach to habit-breaking. The core idea: blocking alone is not enough. If you just block a site, you white-knuckle through the urge and eventually disable the blocker. That's not recovery, that's a countdown to relapse.
 
@@ -28,13 +28,13 @@ QUITTR treats the problem at the behavioral level — panic buttons for moments 
 
 Undrift applies the same thinking to internet distractions. When you hit a blocked page, you're not punished — you're supported. The breathing exercise calms the impulse. The reflection prompt makes you think about what triggered you. The stats remind you how far you've come. The goal is to make the moment of temptation a moment of growth instead of frustration.
 
-## Tech stack
+## 🛠️ Tech stack
 
 - **Extension:** React 18, TypeScript, Vite, CRXJS (Chrome MV3)
 - **Styling:** Tailwind CSS v4
 - **Charts:** Recharts
 
-## Running locally
+## 🚀 Running locally
 
 Prerequisites: Node.js (v18+) and npm.
 
@@ -65,6 +65,6 @@ npm run dev
 
 Then load the `client/dist` folder the same way. Vite + CRXJS will handle hot module replacement.
 
-## License
+## 📄 License
 
 This project is licensed under the [MIT License](LICENSE).
