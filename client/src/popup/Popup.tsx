@@ -1,17 +1,12 @@
 import { useEffect, useState } from "react";
 import "./popup.css";
+import { LevelBadge } from "../components/LevelBadge";
+import { getXPProgress } from "../gamification";
 
 interface BlockSession {
   isActive: boolean;
   endsAt: number;
   blockedSites: string[];
-}
-
-interface StreakData {
-  currentStreak: number;
-  longestStreak: number;
-  lastCompletedDate: string;
-  streakStartDate: string;
 }
 
 interface SessionStats {
@@ -73,10 +68,10 @@ export function Popup() {
   const [selectedPresets, setSelectedPresets] = useState<string[]>([]);
   const [customSites, setCustomSites] = useState<string[]>([]);
   const [customInput, setCustomInput] = useState("");
-  const [streak, setStreak] = useState<StreakData | null>(null);
   const [todayScreenTime, setTodayScreenTime] = useState<number>(0);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [sessionStats, setSessionStats] = useState<SessionStats | null>(null);
+  const [levelInfo, setLevelInfo] = useState<{ level: number; progressPercent: number } | null>(null);
   const [encouragement] = useState(
     () => ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]
   );
@@ -90,10 +85,6 @@ export function Popup() {
     chrome.storage.local.get(["selectedPresets", "customSites"], (result) => {
       setSelectedPresets(result.selectedPresets || ["twitter"]);
       setCustomSites(result.customSites || []);
-    });
-
-    chrome.runtime.sendMessage({ type: "GET_STREAK" }, (response) => {
-      if (response) setStreak(response);
     });
 
     chrome.runtime.sendMessage({ type: "GET_TIME_TRACKING" }, (response) => {
@@ -112,6 +103,13 @@ export function Popup() {
 
     chrome.runtime.sendMessage({ type: "GET_STATS" }, (response) => {
       if (response) setSessionStats(response);
+    });
+
+    chrome.runtime.sendMessage({ type: "GET_GAMIFICATION" }, (response) => {
+      if (response?.xp) {
+        const progress = getXPProgress(response.xp.total);
+        setLevelInfo({ level: progress.level, progressPercent: progress.progressPercent });
+      }
     });
   }, []);
 
@@ -201,12 +199,11 @@ export function Popup() {
     );
   }
 
-  const streakBadge = (
-    <div className="streak-badge" aria-label={streak && streak.currentStreak > 0 ? `${streak.currentStreak} day streak` : "No active streak"}>
-      <span className="streak-icon">&#x1F525;</span>
-      {streak && streak.currentStreak > 0
-        ? `${streak.currentStreak}-day streak`
-        : "Start a streak"}
+  const headerBadges = (
+    <div className="header-badges">
+      {levelInfo && (
+        <LevelBadge level={levelInfo.level} progressPercent={levelInfo.progressPercent} size="sm" />
+      )}
     </div>
   );
 
@@ -217,7 +214,7 @@ export function Popup() {
         <div className="header">
           <span className="header-icon">&#x1F6E1;</span>
           <h1>Focus Guard</h1>
-          {streakBadge}
+          {headerBadges}
         </div>
 
         <div className="active-session">
@@ -244,7 +241,7 @@ export function Popup() {
           {showEndConfirm ? (
             <div className="end-confirm">
               <p className="end-confirm-message">
-                Are you sure? This won't count toward your streak.
+                Are you sure you want to end this session early?
               </p>
               <div className="end-confirm-buttons">
                 <button className="btn-keep-going" onClick={handleEndCancel}>
@@ -278,7 +275,7 @@ export function Popup() {
       <div className="header">
         <span className="header-icon">&#x1F6E1;</span>
         <h1>Focus Guard</h1>
-        {streakBadge}
+        {headerBadges}
       </div>
 
       <div className="header-stats">

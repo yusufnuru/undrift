@@ -8,9 +8,12 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { getOverviewStats } from '../storage';
+import { getOverviewStats, getGamificationData } from '../storage';
 import type { OverviewStats } from '../mockData';
 import { formatSeconds, formatDateShort } from '../utils';
+import { LevelBadge } from '../../components/LevelBadge';
+import { getXPProgress, getLevelTitle, ACHIEVEMENT_DEFINITIONS } from '../../gamification';
+import type { GamificationData } from '../../gamification';
 
 const TOOLTIP_STYLE = {
   background: 'rgba(12, 12, 20, 0.95)',
@@ -24,9 +27,11 @@ const TOOLTIP_STYLE = {
 
 export default function Overview() {
   const [stats, setStats] = useState<OverviewStats | null>(null);
+  const [gamification, setGamification] = useState<GamificationData | null>(null);
 
   useEffect(() => {
     getOverviewStats().then(setStats);
+    getGamificationData().then(setGamification);
   }, []);
 
   if (!stats) {
@@ -46,18 +51,6 @@ export default function Overview() {
 
   return (
     <div className="animate-page-enter">
-
-      <div className="bg-bg-card border border-border-card rounded-md p-6 backdrop-blur-[8px] shadow-card transition-[border-color,box-shadow] duration-300 hover:border-[rgba(255,255,255,0.1)] mb-7">
-        <div className="text-center py-12 px-8 relative overflow-hidden streak-glow">
-          <div className="font-display text-[88px] font-normal text-accent-ember leading-none relative [text-shadow:0_0_60px_rgba(245,158,11,0.2)] max-md:text-[64px]">
-            {stats.currentStreak}
-          </div>
-          <div className="text-sm text-text-secondary mt-3 uppercase tracking-[0.1em] font-medium">
-            day streak
-          </div>
-        </div>
-      </div>
-
 
       <h3 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-text-secondary mb-4">
         Today&rsquo;s Summary
@@ -82,6 +75,51 @@ export default function Overview() {
           </div>
         ))}
       </div>
+
+      {gamification && (() => {
+        const xpProgress = getXPProgress(gamification.xp.total);
+        const levelTitle = getLevelTitle(xpProgress.level);
+        const latestAchievement = gamification.achievements.earned.length > 0
+          ? gamification.achievements.earned[gamification.achievements.earned.length - 1]
+          : null;
+        const latestDef = latestAchievement
+          ? ACHIEVEMENT_DEFINITIONS.find((d) => d.id === latestAchievement.id)
+          : null;
+
+        return (
+          <div className="grid grid-cols-2 gap-4 mb-10 max-md:grid-cols-1">
+            <div className="bg-bg-card border border-border-card rounded-md p-6 backdrop-blur-[8px] shadow-card">
+              <div className="flex items-center gap-4">
+                <LevelBadge level={xpProgress.level} progressPercent={xpProgress.progressPercent} size="lg" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-text-muted uppercase tracking-wide font-medium mb-1">Focus Level</div>
+                  <div className="font-display text-2xl text-text-heading">
+                    Level {xpProgress.level} <span className="text-sm text-accent-ember">{levelTitle}</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden mt-2">
+                    <div className="h-full bg-accent-ember rounded-full transition-all duration-500" style={{ width: `${xpProgress.progressPercent}%` }} />
+                  </div>
+                  <div className="text-[10px] text-text-muted mt-1">{gamification.xp.total.toLocaleString()} XP</div>
+                </div>
+              </div>
+            </div>
+            <div className="bg-bg-card border border-border-card rounded-md p-6 backdrop-blur-[8px] shadow-card">
+              <div className="text-xs text-text-muted uppercase tracking-wide font-medium mb-3">Latest Achievement</div>
+              {latestDef && latestAchievement ? (
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">{latestDef.icon}</span>
+                  <div>
+                    <div className="text-sm font-semibold text-text-heading">{latestDef.name}</div>
+                    <div className="text-xs text-text-muted">{latestDef.description}</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-text-muted">No achievements yet. Start a focus session!</div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
 
       <h3 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-text-secondary mb-4">

@@ -4,8 +4,8 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 const navItems = [
   { to: '/', label: 'Overview', icon: '\u25C8' },
   { to: '/time-tracking', label: 'Time Tracking', icon: '\u29D7' },
+  { to: '/achievements', label: 'Achievements', icon: '\u2726' },
   { to: '/sessions', label: 'Sessions', icon: '\u25CE' },
-  { to: '/streaks', label: 'Streaks', icon: '\u2736' },
   { to: '/settings', label: 'Settings', icon: '\u2699' },
 ];
 
@@ -13,7 +13,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/': 'Overview',
   '/time-tracking': 'Time Tracking',
   '/sessions': 'Sessions',
-  '/streaks': 'Streaks',
+  '/achievements': 'Achievements',
   '/settings': 'Settings',
 };
 

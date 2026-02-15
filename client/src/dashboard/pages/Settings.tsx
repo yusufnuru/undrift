@@ -5,9 +5,6 @@ import type { Settings as SettingsType } from '../mockData';
 type NotifKey = keyof SettingsType['notificationPrefs'];
 
 const NOTIF_LABELS: Record<NotifKey, string> = {
-  streakMilestone: 'Streak milestone reached',
-  streakAtRisk: 'Streak at risk reminder',
-  streakBroken: 'Streak broken notification',
   timeLimit: 'Time limit warnings',
   dailySummary: 'Daily summary',
 };

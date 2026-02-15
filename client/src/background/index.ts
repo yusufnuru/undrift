@@ -1,11 +1,19 @@
-// ============================================================================
-// Focus Guard v2 — Background Service Worker
-// ============================================================================
-// ALL event listeners are registered at the TOP LEVEL per MV3 requirements.
-// ALL state is persisted in chrome.storage.local (never in-memory globals).
-// ============================================================================
-
-// --- Interfaces ---
+import {
+  getGamificationData,
+  saveGamificationData,
+  getSessionCtx,
+  saveSessionCtx,
+  createDefaultSessionCtx,
+  awardXP,
+  updateCounters,
+  checkAchievements,
+  ACHIEVEMENT_XP,
+  ACHIEVEMENT_DEFINITIONS,
+} from "../gamification";
+import type {
+  EarnedAchievement,
+  CounterEvent,
+} from "../gamification";
 
 interface BlockSession {
   isActive: boolean;
@@ -43,20 +51,12 @@ interface SessionHistory {
   lastSyncedAt: number;
 }
 
-interface StreakData {
-  currentStreak: number;
-  longestStreak: number;
-  lastCompletedDate: string;
-  streakStartDate: string;
-}
-
 interface NotificationState {
   timeAlertsSent: {
     [domain: string]: {
       [threshold: number]: string;
     };
   };
-  lastStreakAlertDate: string;
   sessionWarningFired: boolean;
 }
 
@@ -67,17 +67,12 @@ interface Reflection {
   domain?: string;
 }
 
-// --- Constants ---
-
 const DEFAULT_BLOCKED_SITES = ["twitter.com", "x.com"];
 const IDLE_DETECTION_INTERVAL = 60;
 const HEARTBEAT_PERIOD_MINUTES = 0.5;
 const TIME_ALERT_THRESHOLDS = [15, 30, 60]; // minutes
-const STREAK_MILESTONES = [3, 7, 14, 21, 30, 60, 90, 180, 365];
 const SESSION_WARNING_MINUTES = 5;
 const MAX_LOCAL_SESSIONS = 100;
-
-// --- Helpers ---
 
 function getTodayString(): string {
   return new Date().toISOString().slice(0, 10);
@@ -127,8 +122,6 @@ function getBlockedPageUrl(originalUrl: string): string {
   return `${blockedPage}?returnUrl=${encodeURIComponent(originalUrl)}`;
 }
 
-// --- Storage Accessors ---
-
 async function getSession(): Promise<BlockSession> {
   const result = await chrome.storage.local.get("session");
   return (
@@ -166,28 +159,11 @@ async function saveSessionHistory(history: SessionHistory): Promise<void> {
   await chrome.storage.local.set({ sessionHistory: history });
 }
 
-async function getStreak(): Promise<StreakData> {
-  const result = await chrome.storage.local.get("streak");
-  return (
-    result.streak || {
-      currentStreak: 0,
-      longestStreak: 0,
-      lastCompletedDate: "",
-      streakStartDate: "",
-    }
-  );
-}
-
-async function saveStreak(streak: StreakData): Promise<void> {
-  await chrome.storage.local.set({ streak });
-}
-
 async function getNotificationState(): Promise<NotificationState> {
   const result = await chrome.storage.local.get("notificationState");
   return (
     result.notificationState || {
       timeAlertsSent: {},
-      lastStreakAlertDate: "",
       sessionWarningFired: false,
     }
   );
@@ -198,8 +174,6 @@ async function saveNotificationState(
 ): Promise<void> {
   await chrome.storage.local.set({ notificationState: state });
 }
-
-// --- Blocking Logic (preserved from v1) ---
 
 async function redirectExistingTabs(blockedSites: string[]): Promise<void> {
   const tabs = await chrome.tabs.query({});
@@ -264,8 +238,6 @@ async function disableBlocking(): Promise<void> {
     removeRuleIds: existingIds,
   });
 }
-
-// --- Time Tracking ---
 
 async function flushCurrentTracking(): Promise<void> {
   const tracking = await getTimeTracking();
@@ -340,81 +312,6 @@ async function resumeTrackingForActiveTab(): Promise<void> {
   }
 }
 
-// --- Streak Management ---
-
-function daysBetween(dateA: string, dateB: string): number {
-  const a = new Date(dateA + "T00:00:00");
-  const b = new Date(dateB + "T00:00:00");
-  return Math.round(Math.abs(a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24));
-}
-
-async function updateStreakOnCompletion(): Promise<void> {
-  const streak = await getStreak();
-  const today = getTodayString();
-
-  if (streak.lastCompletedDate === today) {
-    // Already completed a session today, no streak change
-    return;
-  }
-
-  if (
-    streak.lastCompletedDate &&
-    daysBetween(streak.lastCompletedDate, today) === 1
-  ) {
-    // Consecutive day — increment streak
-    streak.currentStreak += 1;
-  } else if (!streak.lastCompletedDate || daysBetween(streak.lastCompletedDate, today) > 1) {
-    // Gap of more than 1 day or first ever — start new streak
-    streak.currentStreak = 1;
-    streak.streakStartDate = today;
-  }
-
-  streak.lastCompletedDate = today;
-  if (streak.currentStreak > streak.longestStreak) {
-    streak.longestStreak = streak.currentStreak;
-  }
-
-  await saveStreak(streak);
-
-  // Check for streak milestones
-  if (STREAK_MILESTONES.includes(streak.currentStreak)) {
-    await sendNotification(
-      `streak-milestone-${streak.currentStreak}`,
-      `${streak.currentStreak} days focused!`,
-      `You've maintained focus for ${streak.currentStreak} consecutive days. Keep it up!`,
-      2
-    );
-  }
-}
-
-async function checkStreakBroken(): Promise<void> {
-  const streak = await getStreak();
-  if (streak.currentStreak === 0) return;
-
-  const today = getTodayString();
-  if (!streak.lastCompletedDate) return;
-
-  const gap = daysBetween(streak.lastCompletedDate, today);
-  if (gap >= 2) {
-    // Streak is broken — a full calendar day passed with no completion
-    const oldStreak = streak.currentStreak;
-    streak.currentStreak = 0;
-    streak.streakStartDate = "";
-    await saveStreak(streak);
-
-    await sendNotification(
-      "streak-broken",
-      `Streak ended at ${oldStreak} days`,
-      oldStreak === streak.longestStreak
-        ? "That was your longest streak yet. Start fresh today."
-        : "Start a new streak today with a focus session.",
-      1
-    );
-  }
-}
-
-// --- Notifications ---
-
 async function sendNotification(
   id: string,
   title: string,
@@ -467,7 +364,81 @@ async function checkTimeAlerts(): Promise<void> {
   if (changed) await saveNotificationState(state);
 }
 
-// --- Session Management ---
+interface GamificationResult {
+  xpAwarded: number;
+  newAchievements: EarnedAchievement[];
+  leveledUp: boolean;
+  newLevel: number;
+}
+
+async function processGamificationEvent(
+  counterEvent: CounterEvent,
+  xpActions: { source: Parameters<typeof awardXP>[1]; amount: number; description: string }[],
+  checkCtx?: Parameters<typeof checkAchievements>[2],
+): Promise<GamificationResult> {
+  let data = await getGamificationData();
+  const session = await getSession();
+  const sessionCtx = session.sessionId
+    ? await getSessionCtx(session.sessionId)
+    : undefined;
+
+  data = updateCounters(data, counterEvent);
+
+  let totalAwarded = 0;
+  let leveledUp = false;
+  let newLevel = data.xp.level;
+
+  for (const action of xpActions) {
+    const result = awardXP(data, action.source, action.amount, action.description, sessionCtx);
+    data = result.data;
+    totalAwarded += result.awarded;
+    if (result.leveledUp) {
+      leveledUp = true;
+      newLevel = result.newLevel;
+    }
+  }
+
+  const achievementResult = checkAchievements(data, checkCtx);
+  data = achievementResult.data;
+  const newAchievements = achievementResult.newAchievements;
+
+  for (const a of newAchievements) {
+    const def = ACHIEVEMENT_DEFINITIONS.find((d) => d.id === a.id);
+    const xp = ACHIEVEMENT_XP[a.tier];
+    const result = awardXP(data, "achievement", xp, `Achievement: ${def?.name ?? a.id}`);
+    data = result.data;
+    totalAwarded += result.awarded;
+    if (result.leveledUp) {
+      leveledUp = true;
+      newLevel = result.newLevel;
+    }
+  }
+
+  await saveGamificationData(data);
+  if (sessionCtx) await saveSessionCtx(sessionCtx);
+
+  for (const a of newAchievements) {
+    const def = ACHIEVEMENT_DEFINITIONS.find((d) => d.id === a.id);
+    if (def) {
+      await sendNotification(
+        `achievement-${a.id}`,
+        "Achievement Unlocked!",
+        `${def.icon} ${def.name} — ${def.description}`,
+        2,
+      );
+    }
+  }
+  if (leveledUp) {
+    await sendNotification(
+      `level-up-${newLevel}`,
+      "Level Up!",
+      `You're now Level ${newLevel}. Keep going!`,
+      1,
+    );
+  }
+
+  return { xpAwarded: totalAwarded, newAchievements, leveledUp, newLevel };
+}
 
 async function startSession(
   durationMinutes: number,
@@ -491,15 +462,14 @@ async function startSession(
   await enableBlocking(session.blockedSites);
   await redirectExistingTabs(session.blockedSites);
 
-  // Reset session warning flag
+  await saveSessionCtx(createDefaultSessionCtx(sessionId));
+
   const notifState = await getNotificationState();
   notifState.sessionWarningFired = false;
   await saveNotificationState(notifState);
 
-  // Session end alarm
   chrome.alarms.create("sessionEnd", { when: endsAt });
 
-  // Session warning alarm (5 min before end)
   const warningTime = endsAt - SESSION_WARNING_MINUTES * 60 * 1000;
   if (warningTime > now) {
     chrome.alarms.create("session-warning", { when: warningTime });
@@ -514,13 +484,11 @@ async function endSession(
 
   const completed = reason === "timer" || reason === "browser_closed";
 
-  // Update session record
   session.isActive = false;
   session.endedAt = Date.now();
   session.endReason = reason;
   session.completed = completed;
 
-  // If manual end, mark any pending interruptions as "broke"
   if (reason === "manual") {
     for (const interruption of session.interruptions) {
       if ((interruption.outcome as string) === "pending") {
@@ -535,7 +503,6 @@ async function endSession(
   chrome.alarms.clear("sessionEnd");
   chrome.alarms.clear("session-warning");
 
-  // Save to session history
   const history = await getSessionHistory();
   history.sessions.unshift({ ...session });
   if (history.sessions.length > MAX_LOCAL_SESSIONS) {
@@ -543,14 +510,27 @@ async function endSession(
   }
   await saveSessionHistory(history);
 
-  // Update streak if completed
   if (completed) {
-    await updateStreakOnCompletion();
+    const durationBonus = Math.floor(session.durationMinutes / 30) * 10;
+    const xpActions: { source: Parameters<typeof awardXP>[1]; amount: number; description: string }[] = [
+      { source: "session_complete", amount: 50, description: `Completed ${session.durationMinutes}-min focus session` },
+    ];
+    if (durationBonus > 0) {
+      xpActions.push({ source: "session_duration_bonus", amount: durationBonus, description: `Duration bonus (${session.durationMinutes} min)` });
+    }
+    await processGamificationEvent(
+      { type: "session_complete", durationMinutes: session.durationMinutes, interruptionCount: session.interruptions.length, startedAt: session.startedAt },
+      xpActions,
+      { sessionStartedAt: session.startedAt, sessionEndedAt: session.endedAt, sessionDurationMinutes: session.durationMinutes },
+    );
+  } else if (reason === "manual") {
+    await processGamificationEvent(
+      { type: "session_manual_end" },
+      [],
+    );
   }
 
-  // Session complete notification
   if (completed) {
-    const streak = await getStreak();
     const interruptionCount = session.interruptions.length;
     const siteCount = session.blockedSites.length;
     await sendNotification(
@@ -558,66 +538,32 @@ async function endSession(
       "Focus session complete!",
       `You blocked ${siteCount} site${siteCount !== 1 ? "s" : ""} for ${session.durationMinutes} minutes` +
         (interruptionCount > 0
-          ? ` and resisted ${interruptionCount} temptation${interruptionCount !== 1 ? "s" : ""}`
-          : "") +
-        (streak.currentStreak > 0
-          ? `. Streak: ${streak.currentStreak} day${streak.currentStreak !== 1 ? "s" : ""}.`
+          ? ` and resisted ${interruptionCount} temptation${interruptionCount !== 1 ? "s" : ""}.`
           : "."),
       2
     );
   }
 }
 
-// --- Alarms Setup ---
-
 async function ensureAlarmsExist(): Promise<void> {
-  // Heartbeat
   const heartbeat = await chrome.alarms.get("heartbeat");
   if (!heartbeat) {
     chrome.alarms.create("heartbeat", {
       periodInMinutes: HEARTBEAT_PERIOD_MINUTES,
     });
   }
-
-  // Streak check — daily at 8 PM local time
-  const streakCheck = await chrome.alarms.get("streak-check");
-  if (!streakCheck) {
-    const now = new Date();
-    const next8pm = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-      20,
-      0,
-      0
-    );
-    if (next8pm.getTime() <= now.getTime()) {
-      next8pm.setDate(next8pm.getDate() + 1);
-    }
-    chrome.alarms.create("streak-check", {
-      when: next8pm.getTime(),
-      periodInMinutes: 1440,
-    });
-  }
 }
 
-// ============================================================================
-// TOP-LEVEL EVENT LISTENERS (MV3 requirement)
-// ============================================================================
-
-// --- Idle Detection ---
+// Top-level event listeners required by MV3
 chrome.idle.setDetectionInterval(IDLE_DETECTION_INTERVAL);
 
 chrome.idle.onStateChanged.addListener(async (newState) => {
   if (newState === "active") {
     await resumeTrackingForActiveTab();
   } else {
-    // "idle" or "locked" — pause tracking
     await stopTracking();
   }
 });
-
-// --- Tab Monitoring ---
 
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
   await handleTabChange(activeInfo.tabId, activeInfo.windowId);
@@ -625,7 +571,6 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 
 chrome.tabs.onUpdated.addListener(async (_tabId, changeInfo, tab) => {
   if (changeInfo.url === undefined) return;
-  // Only handle if this is the active tab in the focused window
   if (!tab.active) return;
   const focusedWindow = await chrome.windows.getLastFocused();
   if (tab.windowId !== focusedWindow.id) return;
@@ -641,16 +586,13 @@ chrome.tabs.onUpdated.addListener(async (_tabId, changeInfo, tab) => {
 });
 
 chrome.tabs.onRemoved.addListener(async (_tabId) => {
-  // If the removed tab was the one being tracked, resume for the new active tab
   await resumeTrackingForActiveTab();
 });
 
 chrome.windows.onFocusChanged.addListener(async (windowId) => {
   if (windowId === chrome.windows.WINDOW_ID_NONE) {
-    // Chrome lost focus entirely
     await stopTracking();
   } else {
-    // Focus changed to a different window — track its active tab
     try {
       const [tab] = await chrome.tabs.query({
         active: true,
@@ -669,8 +611,6 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
     }
   }
 });
-
-// --- Alarms ---
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === "sessionEnd") {
@@ -697,36 +637,9 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === "heartbeat") {
     await flushCurrentTracking();
     await checkTimeAlerts();
-
-    // Also check if streak is broken (covers midnight rollover)
-    await checkStreakBroken();
-    return;
-  }
-
-  if (alarm.name === "streak-check") {
-    // Evening check — is streak at risk?
-    const streak = await getStreak();
-    if (streak.currentStreak === 0) return;
-
-    const today = getTodayString();
-    if (streak.lastCompletedDate === today) return; // Already completed today
-
-    const notifState = await getNotificationState();
-    if (notifState.lastStreakAlertDate === today) return; // Already alerted today
-    notifState.lastStreakAlertDate = today;
-    await saveNotificationState(notifState);
-
-    await sendNotification(
-      "streak-at-risk",
-      `Your ${streak.currentStreak}-day streak is at risk`,
-      "Complete a focus session before midnight to keep it alive.",
-      2
-    );
     return;
   }
 });
-
-// --- Messages ---
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === "START_SESSION") {
@@ -747,11 +660,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
-  if (message.type === "GET_STREAK") {
-    getStreak().then((streak) => sendResponse(streak));
-    return true;
-  }
-
   if (message.type === "GET_TIME_TRACKING") {
     getTimeTracking().then((data) => sendResponse(data));
     return true;
@@ -767,20 +675,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const interruption: Interruption = {
         timestamp: Date.now(),
         domain: message.domain || "unknown",
-        outcome: "stayed", // Default to "stayed"; changed to "broke" only on manual session end
+        outcome: "stayed",
       };
       session.interruptions.push(interruption);
       await saveSession(session);
-      sendResponse({ success: true });
+
+      const gamResult = await processGamificationEvent(
+        { type: "interruption_resisted" },
+        [{ source: "interruption_resisted", amount: 15, description: `Resisted ${message.domain || "distraction"}` }],
+      );
+      sendResponse({ success: true, xpAwarded: gamResult.xpAwarded, newAchievements: gamResult.newAchievements });
     })();
     return true;
   }
 
   if (message.type === "GET_STATS") {
     (async () => {
-      const [tracking, streak, history] = await Promise.all([
+      const [tracking, history] = await Promise.all([
         getTimeTracking(),
-        getStreak(),
         getSessionHistory(),
       ]);
       const today = getTodayString();
@@ -796,7 +708,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({
         todayTracking,
         totalTodaySeconds: totalToday,
-        streak,
         completedSessions,
         totalSessions,
         completionRate:
@@ -808,25 +719,56 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "GET_GAMIFICATION") {
+    getGamificationData().then((data) => sendResponse(data));
+    return true;
+  }
+
+  if (message.type === "LOG_BREATHE") {
+    (async () => {
+      if (message.status !== "complete") {
+        sendResponse({ success: true });
+        return;
+      }
+      const gamResult = await processGamificationEvent(
+        { type: "breathing_complete" },
+        [{ source: "breathing_exercise", amount: 10, description: "Completed breathing exercise" }],
+      );
+      sendResponse({ success: true, xpAwarded: gamResult.xpAwarded, newAchievements: gamResult.newAchievements });
+    })();
+    return true;
+  }
+
   if (message.type === "SAVE_REFLECTION") {
     (async () => {
       const result = await chrome.storage.local.get("reflections");
       const reflections: Reflection[] = result.reflections || [];
       const session = await getSession();
+      const text = message.text || message.data?.response || "";
       reflections.push({
         timestamp: Date.now(),
         sessionId: session.sessionId || "",
-        text: message.text || "",
-        domain: message.domain,
+        text,
+        domain: message.domain || message.data?.domain,
       });
       await chrome.storage.local.set({ reflections });
-      sendResponse({ success: true });
+
+      let gamResult: GamificationResult | null = null;
+      if (text.length >= 10) {
+        gamResult = await processGamificationEvent(
+          { type: "reflection_submitted" },
+          [{ source: "reflection", amount: 10, description: "Submitted reflection" }],
+        );
+      }
+      sendResponse({
+        success: true,
+        xpAwarded: gamResult?.xpAwarded ?? 0,
+        newAchievements: gamResult?.newAchievements ?? [],
+      });
     })();
     return true;
   }
 });
-
-// --- Startup & Install ---
 
 chrome.runtime.onInstalled.addListener(async () => {
   await ensureAlarmsExist();
@@ -841,23 +783,17 @@ chrome.runtime.onInstalled.addListener(async () => {
       chrome.alarms.create("session-warning", { when: warningTime });
     }
   } else if (session.isActive) {
-    // Session expired during update/install
     await endSession("browser_closed");
   }
 
-  // Start tracking for the current active tab
   await resumeTrackingForActiveTab();
 });
 
 chrome.runtime.onStartup.addListener(async () => {
   await ensureAlarmsExist();
 
-  // Check for broken streaks on startup
-  await checkStreakBroken();
-
   const session = await getSession();
   if (session.isActive && session.endsAt > Date.now()) {
-    // Session still active — re-verify alarms
     chrome.alarms.create("sessionEnd", { when: session.endsAt });
     const warningTime =
       session.endsAt - SESSION_WARNING_MINUTES * 60 * 1000;
@@ -865,11 +801,9 @@ chrome.runtime.onStartup.addListener(async () => {
       chrome.alarms.create("session-warning", { when: warningTime });
     }
   } else if (session.isActive) {
-    // Session expired while browser was closed
     await endSession("browser_closed");
   }
 
-  // Resume time tracking for whatever tab is currently active
   await resumeTrackingForActiveTab();
 });
 
