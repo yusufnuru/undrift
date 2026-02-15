@@ -7,7 +7,7 @@ Items:
 - [x] Clean up vibe coded slop
 - [x] Clean up comments
 - [x] Create a new name
-- [] Open source it
+- [x] Open source it
 - [] Modify Focus Duration
 - [x] Create ReadME + Licnese
 - [x] Introduce "points" system
